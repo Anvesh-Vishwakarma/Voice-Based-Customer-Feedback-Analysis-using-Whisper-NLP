@@ -7,6 +7,9 @@ from whisper.audio import log_mel_spectrogram, pad_or_trim
 import joblib
 import os
 import re
+from datetime import datetime
+import sqlite3
+from jiwer import wer
 
 # Setupt Path
 
@@ -74,30 +77,91 @@ def speech_to_text():
     return text.strip()
 
 
-def predict_sentiment():
+def predict_sentiment(text):
 
-    while True:
-        record_audio()
-
-        output = speech_to_text()
+    #while True:
+       # record_audio()
+       # output = speech_to_text()
         print()
-        print("Customer statement: ",output)
+        print("Customer statement: ",text)
 
-        text_vector = vectorizer.transform([output])
+        text_vector = vectorizer.transform([text])
         prediction = sentiment_model.predict(text_vector)[0]
         #prediction_label = vectorizer.inverse_transform([prediction])[0]
         
         print()
-        print("Sentiment:")
+
         if prediction == 0:
-            print("Negative Review")
+             print("Sentiment: Negative Review")
         elif prediction == 1:
-            print("Neutral review")
+             print("Sentiment: Neutral review")
         else:
-            print("Positive Review")
+             print("Sentiment: Positive Review")
 
         print()
+        
+
+def sentiment_data():
+    record_audio()
+
+    transcription = speech_to_text()
+    sentiment = predict_sentiment(transcription)
+
+    data = (
+        "output.wav",
+        transcription,
+        sentiment,
+        datetime.now()
+    )
+    return data
+
+def insert_sentiment_record():
+
+    data = sentiment_data()
+
+    conn = None
+    try:
+        # Connect to DB
+        conn = sqlite3.connect("voice_sentiment.db")
+        cursor = conn.cursor()
+
+        # Create table if not exists
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sentiment_analysis (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            audio_id TEXT,
+            transcription TEXT,
+            sentiment TEXT,
+            created_at DATETIME
+        )
+        """)
+
+        # Insert record
+        cursor.execute("""
+        INSERT INTO sentiment_analysis 
+        (audio_id, transcription, sentiment, created_at)
+        VALUES (?, ?, ?, ?)
+        """, data)
+
+        conn.commit()
+        print("Data inserted successfully")
+
+    except sqlite3.OperationalError as e:
+        print("Database operational error:", e)
+
+    except sqlite3.IntegrityError as e:
+        print("Data integrity error:", e)
+
+    except Exception as e:
+        print("Unexpected error:", e)
+
+    finally:
+        if conn:
+            conn.close()
+            print("Database connection closed")
+        
 
 if __name__ == "__main__":
-    predict_sentiment()
+    insert_sentiment_record()
+
 
